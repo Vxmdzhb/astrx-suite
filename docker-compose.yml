@@ -1,0 +1,224 @@
+# astrx-suite — one-command Tor deployment (Rust engines).
+#
+#   cp deploy/.env.example .env      # optional: profiles / image tag
+#   docker compose up -d             # builds + starts the published stack
+#   docker compose exec tor sh -c 'cat /var/lib/tor/*/hostname'   # your .onions
+#
+# PRIVACY POSTURE
+#   * No app port is published to the host — there is NO `ports:` mapping
+#     anywhere below. The only ingress is Tor, which reaches each service over
+#     an INTERNAL Docker network that has no route to the host or the internet.
+#   * `tor` is dual-homed: the `internal` network (to reach the app containers
+#     and to offer SOCKS to the crawler) and the `egress` network (so Tor — and
+#     only Tor and the opt-in clearnet crawlers — can reach the outside world).
+#   * Each stateful service keeps its database / repos in a named volume, and
+#     Tor keeps its hidden-service keys in `tor-keys`, so the generated .onion
+#     addresses are STABLE across restarts.
+#
+# THE IMAGES
+#   Every engine is a statically-linked musl binary. Four of the five run
+#   `FROM scratch` — no shell, no libc, no package manager, nothing to escalate
+#   with. `gitweb` is the documented exception (alpine + the real `git` binary,
+#   which it execs argv-only). One `docker compose build` compiles the Cargo
+#   workspace ONCE and cuts every image from the same builder layer.
+
+name: astrx-suite
+
+# --- shared config for the always-on, published app services ---------------
+x-app-published: &app-published
+  restart: unless-stopped
+  networks: [internal]
+  # Hardening: these are static binaries serving HTTP; they need no Linux
+  # capabilities and must never gain privileges.
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: ["ALL"]
+  read_only: true
+
+networks:
+  # No route to the host or the internet. Tor bridges into it for ingress.
+  # The subnet is pinned because deploy/torrc's SocksPolicy allows exactly this
+  # CIDR to use SOCKS and rejects the egress bridge + host. Keep the two in sync.
+  internal:
+    internal: true
+    ipam:
+      config:
+        - subnet: 10.63.0.0/24
+  # Outbound-only bridge for Tor's own traffic and the opt-in clearnet crawlers.
+  egress:
+    driver: bridge
+
+volumes:
+  gitweb-repos:        # git repositories served read-only by gitweb
+  onioncrawler-data:   # onioncrawler crawl.db (+ seeds/blocklists)
+  websearch-data:      # websearch web.db (+ seeds)
+  torrentds-data:      # torrentds torrentds.db (+ tracker peer store)
+  tor-keys:            # /var/lib/tor — hidden-service keys => STABLE .onions
+
+services:
+  # ---------------------------------------------------------------- gitweb --
+  gitweb:
+    <<: *app-published
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      target: gitweb
+    image: astrx/gitweb:${IMAGE_TAG:-latest}
+    command: ["--root", "/repos", "--host", "0.0.0.0", "--port", "8801",
+              "--quiet", "--auth", "${GITWEB_AUTH:-}"]
+    volumes:
+      - gitweb-repos:/repos
+    expose: ["8801"]
+
+  # -------------------------------------------------------- onioncrawler ----
+  onioncrawler-search:
+    <<: *app-published
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      target: onioncrawler
+    image: astrx/onioncrawler:${IMAGE_TAG:-latest}
+    command: ["search", "--db", "/data/crawl.db",
+              "--host", "0.0.0.0", "--port", "8802"]
+    volumes:
+      - onioncrawler-data:/data
+    expose: ["8802"]
+
+  # The darknet crawler. Its ONLY route out is Tor's SOCKS port on the internal
+  # network — it is deliberately NOT attached to `egress`, so a bug cannot leak
+  # a clearnet request. Opt in with COMPOSE_PROFILES=crawl-onion.
+  onioncrawler-crawl:
+    profiles: ["crawl-onion"]
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    read_only: true
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      target: onioncrawler
+    image: astrx/onioncrawler:${IMAGE_TAG:-latest}
+    command: ["crawl", "--db", "/data/crawl.db", "--seeds", "/data/seeds.txt",
+              "--tor-host", "tor", "--tor-port", "9050"]
+    volumes:
+      - onioncrawler-data:/data
+    networks: [internal]
+    depends_on: [tor]
+
+  # ------------------------------------------------------------ websearch ---
+  websearch-serve:
+    <<: *app-published
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      target: websearch
+    image: astrx/websearch:${IMAGE_TAG:-latest}
+    command: ["serve", "--db", "/data/web.db",
+              "--host", "0.0.0.0", "--port", "8803"]
+    volumes:
+      - websearch-data:/data
+    expose: ["8803"]
+
+  # The clearnet crawler needs real egress. Opt in with
+  # COMPOSE_PROFILES=crawl-web.
+  websearch-crawl:
+    profiles: ["crawl-web"]
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    read_only: true
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      target: websearch
+    image: astrx/websearch:${IMAGE_TAG:-latest}
+    command: ["crawl", "--db", "/data/web.db", "--seeds", "/data/seeds.txt",
+              "--broad"]
+    volumes:
+      - websearch-data:/data
+    networks: [egress]
+
+  # ------------------------------------------------------------ torrentds ---
+  torrentds-search:
+    <<: *app-published
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      target: torrentds
+    image: astrx/torrentds:${IMAGE_TAG:-latest}
+    command: ["search", "--db", "/data/torrentds.db",
+              "--host", "0.0.0.0", "--port", "8804"]
+    volumes:
+      - torrentds-data:/data
+    expose: ["8804"]
+
+  # The BitTorrent trackers (HTTP published via Tor; UDP is LAN/egress only,
+  # since v3 onions are TCP-only). Opt in with COMPOSE_PROFILES=tracker.
+  torrentds-tracker:
+    profiles: ["tracker"]
+    <<: *app-published
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      target: torrentds
+    image: astrx/torrentds:${IMAGE_TAG:-latest}
+    command: ["tracker", "--db", "/data/torrentds.db",
+              "--host", "0.0.0.0", "--http-port", "8805"]
+    volumes:
+      - torrentds-data:/data
+    expose: ["8805"]
+
+  # The DHT harvester needs real egress (UDP to the global DHT). Opt in with
+  # COMPOSE_PROFILES=index-dht.
+  torrentds-index:
+    profiles: ["index-dht"]
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    read_only: true
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      target: torrentds
+    image: astrx/torrentds:${IMAGE_TAG:-latest}
+    command: ["index", "--db", "/data/torrentds.db"]
+    volumes:
+      - torrentds-data:/data
+    networks: [egress]
+
+  # ------------------------------------------------------------ suitedash ---
+  # The status dashboard. It polls the other services over the internal network
+  # and is itself the suite's health monitor — which is why the scratch images
+  # above carry no HEALTHCHECK of their own (they have no shell to run one).
+  suitedash:
+    <<: *app-published
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      target: suitedash
+    image: astrx/suitedash:${IMAGE_TAG:-latest}
+    command: ["--host", "0.0.0.0", "--port", "8806",
+              "--service", "gitweb=http://gitweb:8801",
+              "--service", "onioncrawler=http://onioncrawler-search:8802",
+              "--service", "websearch=http://websearch-serve:8803",
+              "--service", "torrentds=http://torrentds-search:8804"]
+    expose: ["8806"]
+
+  # ------------------------------------------------------------------ tor ---
+  tor:
+    build:
+      context: ./deploy
+      dockerfile: Dockerfile.tor
+    image: astrx/tor:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - tor-keys:/var/lib/tor
+    # Dual-homed: `internal` to reach the app containers and offer SOCKS to the
+    # onion crawler; `egress` so Tor itself can reach the network.
+    networks: [internal, egress]
+    depends_on:
+      - gitweb
+      - onioncrawler-search
+      - websearch-serve
+      - torrentds-search
+      - suitedash
