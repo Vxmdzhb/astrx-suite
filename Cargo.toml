@@ -32,7 +32,9 @@ members = [
 ]
 # `fuzz/` is a cargo-fuzz project with its own manifest; it is not a workspace
 # member and is built only via `cargo +nightly fuzz`.
-exclude = ["fuzz"]
+# tools/split is a one-off maintenance tool with its own manifest (see its
+# main.rs); run it with `cargo run --manifest-path tools/split/Cargo.toml`.
+exclude = ["fuzz", "tools/split"]
 
 [profile.release]
 opt-level = 3
