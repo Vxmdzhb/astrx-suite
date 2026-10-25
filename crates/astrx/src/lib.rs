@@ -21,6 +21,10 @@
 //! cross-engine diagnostics an operator wants at 3am, in one command with one
 //! exit code.
 //!
+//! [`supervise`] (`astrx run`) starts several engine roles as children of
+//! this one binary and keeps them running, so one container can hold every
+//! role that shares its network instead of one container per role.
+//!
 //! The crate holds no third-party dependencies: it depends on the five engine
 //! crates and on `crawlcore`, all first-party path dependencies.
 
@@ -37,6 +41,8 @@
 pub mod dispatch;
 #[cfg(feature = "net")]
 pub mod doctor;
+#[cfg(feature = "net")]
+pub mod supervise;
 
 #[cfg(feature = "net")]
 pub use dispatch::{run, ENGINES};

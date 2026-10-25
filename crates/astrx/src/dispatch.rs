@@ -76,6 +76,8 @@ pub enum Action {
     },
     /// `astrx doctor …` — the diagnostics runner, with its own flags in `rest`.
     Doctor(Vec<String>),
+    /// `astrx run …` — several roles in one process tree ([`crate::supervise`]).
+    Run(Vec<String>),
     /// Text for stdout and exit 0 (`--help`, `--version`).
     Print(String),
     /// A usage error for stderr and exit 2.
@@ -131,10 +133,13 @@ pub fn split(argv: &[String]) -> Action {
     if sub == "doctor" {
         return Action::Doctor(rest);
     }
+    if sub == "run" {
+        return Action::Run(rest);
+    }
     match ENGINES.iter().find(|e| e.name == sub) {
         Some(engine) => Action::Engine { engine, rest },
         None => Action::Usage(format!(
-            "{}\nerror: unknown subcommand {sub:?} (expected one of: {}, doctor)",
+            "{}\nerror: unknown subcommand {sub:?} (expected one of: {}, doctor, run)",
             usage(),
             ENGINES
                 .iter()
@@ -148,7 +153,7 @@ pub fn split(argv: &[String]) -> Action {
 /// The one-line usage banner that precedes every error.
 #[must_use]
 pub fn usage() -> String {
-    format!("usage: {PROG} <engine|doctor> [args...]")
+    format!("usage: {PROG} <engine|doctor|run> [args...]")
 }
 
 /// `astrx --help`: what each engine is for, and how to reach its own help.
@@ -176,12 +181,18 @@ pub fn help() -> String {
         "doctor"
     ));
     s.push_str(&format!(
+        "\nSeveral roles in one container:\n  {:width$}  Start each 'name=engine args…' as a child, \
+         label its output, restart it when it exits\n",
+        "run"
+    ));
+    s.push_str(&format!(
         "\nOptions:\n  -h, --help     Show this message\n  \
          -V, --version  Show the suite version\n\nExamples:\n  \
          {PROG} gitweb --root /repos --port 8801\n  \
          {PROG} websearch crawl --db /data/web.db --seeds /data/seeds.txt\n  \
          {PROG} torrentds search --db /data/torrentds.db --port 8804\n  \
-         {PROG} doctor --repo-root /repos --db-dir /data\n\n\
+         {PROG} doctor --repo-root /repos --db-dir /data\n  \
+         {PROG} run 'git=gitweb --root /repos' 'web=websearch serve --db /data/web.db'\n\n\
          Per-engine help:\n  {PROG} <engine> --help\n"
     ));
     s
@@ -202,6 +213,7 @@ pub fn run(argv: &[String]) -> ExitCode {
             ExitCode::from(2)
         }
         Action::Doctor(rest) => crate::doctor::run(&rest),
+        Action::Run(rest) => crate::supervise::run(&rest),
         Action::Engine { engine, rest } => {
             let args = rest.into_iter();
             // Each arm calls the engine's own `cli::run`, which is the exact
