@@ -2,9 +2,10 @@
 #
 #   docker build -f deploy/Dockerfile --target websearch -t astrx/websearch .
 #
-# (docker-compose.yml sets `context: .` + `target: <service>` per service, so a
-# single `docker compose build` compiles the workspace ONCE and then cuts five
-# images out of the same builder layer.)
+# The `suite` target (the single `astrx` binary) is what docker-compose.yml
+# runs; the per-engine targets remain for hosts that run one engine each
+# (deploy/FLEET.md). Every target is cut from the same builder layer, so the
+# workspace compiles once.
 #
 # WHY THE IMAGES ARE EMPTY
 #   The suite has zero third-party dependencies by default and its only
@@ -40,14 +41,16 @@ COPY crates ./crates
 ENV RUSTFLAGS="-C target-feature=+crt-static"
 RUN cargo build --release --locked --features net \
         --target x86_64-unknown-linux-musl \
-        -p websearch -p torrentds -p onioncrawler -p suitedash -p gitweb \
+        -p websearch -p torrentds -p onioncrawler -p suitedash -p gitweb -p astrx \
     && mkdir -p /out \
     && cp target/x86_64-unknown-linux-musl/release/websearch \
           target/x86_64-unknown-linux-musl/release/torrentds \
           target/x86_64-unknown-linux-musl/release/onioncrawler \
           target/x86_64-unknown-linux-musl/release/suitedash \
-          target/x86_64-unknown-linux-musl/release/gitweb /out/ \
-    && /out/websearch --help >/dev/null
+          target/x86_64-unknown-linux-musl/release/gitweb \
+          target/x86_64-unknown-linux-musl/release/astrx /out/ \
+    && /out/websearch --help >/dev/null \
+    && /out/astrx --help >/dev/null
 
 # A passwd/group pair so the scratch images can run as a non-root, non-existent
 # user (nobody:65534). There is no shell to log into either way, but a numeric
@@ -132,3 +135,23 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD ["/usr/local/bin/gitweb", "--version"]
 ENTRYPOINT ["/usr/local/bin/gitweb"]
 CMD ["--root", "/repos", "--host", "0.0.0.0", "--port", "8801", "--quiet"]
+
+# ---------------------------------------------------------------------------
+# suite — the single `astrx` binary, which runs any engine (`astrx websearch …`)
+# and several roles at once (`astrx run …`). docker-compose.yml runs the whole
+# suite from this one image in a few containers, grouped by network, instead
+# of one container per role. alpine + git, like gitweb's image, because the
+# group that serves gitweb needs the real `git` binary.
+#
+# Every role in a container runs as the same user, so the data directories
+# are each engine's own path rather than all being /data.
+# ---------------------------------------------------------------------------
+FROM alpine:3.20 AS suite
+RUN apk add --no-cache git \
+    && mkdir -p /repos /data/onion /data/web /data/torrent \
+    && chown 65534:65534 /repos /data /data/onion /data/web /data/torrent
+COPY --from=builder /out/astrx /usr/local/bin/astrx
+USER 65534:65534
+VOLUME ["/repos", "/data/onion", "/data/web", "/data/torrent"]
+ENTRYPOINT ["/usr/local/bin/astrx"]
+CMD ["--help"]

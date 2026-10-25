@@ -9,7 +9,7 @@ COMPOSE := docker compose -f $(ROOT)/docker-compose.yml
 
 .DEFAULT_GOAL := help
 .PHONY: help config build up down restart ps logs onions verify-tor \
-        crawl-onion crawl-web index tracker check test clean
+        crawl check test clean
 
 help: ## Show this help.
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -18,7 +18,7 @@ help: ## Show this help.
 config: ## Validate + render the fully-resolved compose config.
 	$(COMPOSE) config
 
-build: ## Build every image (one cargo build; five images cut from it).
+build: ## Build the suite and tor images (one cargo build).
 	$(COMPOSE) build
 
 up: ## Build (if needed) and start the published stack in the background.
@@ -33,7 +33,7 @@ restart: ## Recreate the running stack.
 ps: ## Show the stack's containers.
 	$(COMPOSE) ps
 
-logs: ## Follow logs (make logs S=websearch-serve to scope to one service).
+logs: ## Follow logs (make logs S=serve to scope to one container; lines carry [role]).
 	$(COMPOSE) logs -f $(S)
 
 onions: ## Print the generated .onion address of every published service.
@@ -44,20 +44,13 @@ onions: ## Print the generated .onion address of every published service.
 verify-tor: ## Syntax-check torrc inside the tor image.
 	$(COMPOSE) run --rm tor --verify-config
 
-crawl-onion: ## Start the darknet crawler (Tor SOCKS egress only).
-	COMPOSE_PROFILES=crawl-onion $(COMPOSE) up -d onioncrawler-crawl
+crawl: ## Start the egress container (its roles: ASTRX_CRAWL_ROLES in .env).
+	COMPOSE_PROFILES=crawl $(COMPOSE) up -d crawl
 
-crawl-web: ## Start the clearnet crawler (needs real egress).
-	COMPOSE_PROFILES=crawl-web $(COMPOSE) up -d websearch-crawl
-
-index: ## Start the torrentds DHT harvester (needs real egress).
-	COMPOSE_PROFILES=index-dht $(COMPOSE) up -d torrentds-index
-
-tracker: ## Start the BitTorrent trackers.
-	COMPOSE_PROFILES=tracker $(COMPOSE) up -d torrentds-tracker
-
-check: ## Ask suitedash whether every service is UP (exit non-zero if not).
-	$(COMPOSE) exec -T suitedash /suitedash --check
+check: ## Ask suitedash whether every front-end is UP (exit non-zero if not).
+	$(COMPOSE) exec -T serve /usr/local/bin/astrx suitedash --check \
+	  --service gitweb=http://127.0.0.1:8801 --service onioncrawler=http://127.0.0.1:8802 \
+	  --service websearch=http://127.0.0.1:8803 --service torrentds=http://127.0.0.1:8804
 
 test: ## Run the full workspace test suite + lint gate on the host.
 	cd $(ROOT) && bash install_rust_suite.sh --ci

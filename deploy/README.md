@@ -3,27 +3,38 @@
 One command brings the whole Rust suite up behind Tor:
 
 ```sh
-cp deploy/.env.example .env      # optional: profiles / image tag
+cp deploy/.env.example .env      # optional: roles / image tag
 docker compose up -d             # builds + starts the published stack
 docker compose exec tor sh -c 'cat /var/lib/tor/*/hostname'   # your .onions
 ```
 
 or, equivalently, `make -C deploy up` then `make -C deploy onions`.
 
-## What gets built
+## What runs
 
 A single `docker compose build` compiles the Cargo workspace **once** (release,
-statically linked against musl) and cuts every image out of that one builder
-layer:
+statically linked against musl) into the `suite` image: alpine, git (for
+gitweb) and the one `astrx` binary, which runs any engine. Every role runs from
+that image under `astrx run`, which starts each role as a child of the binary,
+prefixes its log lines with `[role]`, and restarts a role that exits (1s,
+doubling up to 60s) without touching the others. The roles are grouped into one
+container per network:
 
-| Service        | Image base | Port | What it serves |
-|----------------|------------|------|----------------|
-| `gitweb`       | alpine + git | 8801 | read-only no-JS git frontend |
-| `onioncrawler` | **scratch** | 8802 | darknet crawler + search UI/API |
-| `websearch`    | **scratch** | 8803 | clearnet crawler + search UI/API |
-| `torrentds`    | **scratch** | 8804/8805 | DHT search UI/API + BitTorrent trackers |
-| `suitedash`    | **scratch** | 8806 | the suite status dashboard |
-| `tor`          | alpine + tor | 9050 | the only ingress; SOCKS egress for the onion crawler |
+| Container | Network | Roles (default ✓, optional ○) | Ports |
+|-----------|---------|-------------------------------|-------|
+| `serve`   | `internal` only | ✓ `gitweb` · ✓ `onion-search` · ✓ `web-search` · ✓ `torrent-search` · ✓ `dash` · ○ `tracker` · ○ `onion-crawl` | 8801–8806 |
+| `crawl`   | `egress` only | ○ `web-crawl` · ○ `dht-index` | — |
+| `tor`     | both | the only ingress; SOCKS egress for the onion crawler | 9050 |
+
+`serve` also answers on the names the services had as separate containers
+(`gitweb`, `onioncrawler-search`, `websearch-serve`, `torrentds-search`,
+`torrentds-tracker`, `suitedash`), so `torrc` and anything else that addressed
+them work unchanged. Each engine's data volume is mounted at its own path
+(`/data/onion`, `/data/web`, `/data/torrent`, `/repos`); existing volumes keep
+their contents.
+
+The per-engine image targets in `deploy/Dockerfile` remain, for hosts that run
+one engine each (see [FLEET.md](FLEET.md)).
 
 ### Why the images are empty
 
@@ -61,26 +72,30 @@ alpine plus git and nothing else.
 
 ## Opt-in workloads
 
-The always-on services are the read-only, published ones. The crawlers and
-indexers are behind compose profiles, so you choose what actually goes out to
-the network:
+The always-on roles are the read-only, published ones. The crawlers, the DHT
+harvester and the trackers are off until you list them in `.env`
+(see `deploy/.env.example`), so you choose what actually goes out to the
+network:
 
 ```sh
-COMPOSE_PROFILES=crawl-onion docker compose up -d   # darknet crawler (Tor only)
-COMPOSE_PROFILES=crawl-web   docker compose up -d   # clearnet crawler (egress)
-COMPOSE_PROFILES=index-dht   docker compose up -d   # DHT harvester (egress)
-COMPOSE_PROFILES=tracker     docker compose up -d   # BitTorrent trackers
+# serve: add the darknet crawler (Tor only) and the trackers
+ASTRX_SERVE_ROLES=gitweb,onion-search,web-search,torrent-search,dash,onion-crawl,tracker
+# crawl: the egress container, with the clearnet crawler and/or the DHT harvester
+COMPOSE_PROFILES=crawl
+ASTRX_CRAWL_ROLES=web-crawl,dht-index
 ```
 
-or `make -C deploy crawl-onion` / `crawl-web` / `index` / `tracker`.
+then `docker compose up -d` (or `make -C deploy up`). The crawlers read their
+seeds from `seeds.txt` in their engine's volume.
 
 ## Health
 
 `suitedash` is the suite's health monitor: it polls every service over the
 internal network (trying the configured health path then known fallbacks,
 parsing metrics as both Prometheus text and JSON) and federates every service's
-`/metrics` into one aggregate exposition. That is why the `FROM scratch` images
-carry no `HEALTHCHECK` of their own — they have no shell to run one in.
+`/metrics` into one aggregate exposition. The `serve` container's healthcheck
+is the dashboard's own probe of the four front-ends (adjust it in
+`docker-compose.yml` if you turn one of them off).
 
 ```sh
 make -C deploy check      # exits non-zero if any service is DOWN
@@ -93,7 +108,7 @@ make -C deploy help         list every target
 make -C deploy config       validate + render the resolved compose config
 make -C deploy onions       print each service's generated .onion address
 make -C deploy verify-tor   syntax-check torrc inside the tor image
-make -C deploy logs S=websearch-serve
+make -C deploy logs S=serve  (each line is prefixed with its role)
 make -C deploy test         run the full workspace test + lint gate on the host
 make -C deploy clean        remove containers, networks AND volumes (destroys the .onion keys)
 ```
