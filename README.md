@@ -1,6 +1,6 @@
 # astrx-suite
 
-The companion service suite for [AstrX](https://github.com/hydrastro/astrx),
+The companion service suite for [AstrX](https://github.com/Vxmdzhb/astrx),
 being rewritten in **Rust** — one language for the whole suite. A Cargo
 workspace; each engine is a crate; `crawlcore` is the shared library. Zero
 third-party dependencies by default (stdlib only), matching AstrX's austere,
