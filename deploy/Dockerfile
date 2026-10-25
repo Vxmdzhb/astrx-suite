@@ -2,10 +2,11 @@
 #
 #   docker build -f deploy/Dockerfile --target websearch -t astrx/websearch .
 #
-# The `suite` target (the single `astrx` binary) is what docker-compose.yml
-# runs; the per-engine targets remain for hosts that run one engine each
-# (deploy/FLEET.md). Every target is cut from the same builder layer, so the
-# workspace compiles once.
+# The builder compiles ONE binary, `astrx`, which runs every engine
+# (`astrx websearch …` is exactly `websearch …`: same parser, same code). The
+# `suite` target is what docker-compose.yml runs; the per-engine targets are
+# the same binary with the engine as its entrypoint, for hosts that run one
+# engine each (deploy/FLEET.md).
 #
 # WHY THE IMAGES ARE EMPTY
 #   The suite has zero third-party dependencies by default and its only
@@ -41,16 +42,11 @@ COPY crates ./crates
 ENV RUSTFLAGS="-C target-feature=+crt-static"
 RUN cargo build --release --locked --features net \
         --target x86_64-unknown-linux-musl \
-        -p websearch -p torrentds -p onioncrawler -p suitedash -p gitweb -p astrx \
+        -p astrx \
     && mkdir -p /out \
-    && cp target/x86_64-unknown-linux-musl/release/websearch \
-          target/x86_64-unknown-linux-musl/release/torrentds \
-          target/x86_64-unknown-linux-musl/release/onioncrawler \
-          target/x86_64-unknown-linux-musl/release/suitedash \
-          target/x86_64-unknown-linux-musl/release/gitweb \
-          target/x86_64-unknown-linux-musl/release/astrx /out/ \
-    && /out/websearch --help >/dev/null \
-    && /out/astrx --help >/dev/null
+    && cp target/x86_64-unknown-linux-musl/release/astrx /out/ \
+    && /out/astrx --help >/dev/null \
+    && /out/astrx websearch --help >/dev/null
 
 # A passwd/group pair so the scratch images can run as a non-root, non-existent
 # user (nobody:65534). There is no shell to log into either way, but a numeric
@@ -64,7 +60,7 @@ RUN printf 'nobody:x:65534:65534:nobody:/:/sbin/nologin\n' > /out/passwd \
 # ---------------------------------------------------------------------------
 FROM scratch AS websearch
 COPY --from=builder /out/passwd /out/group /etc/
-COPY --from=builder --chown=65534:65534 /out/websearch /websearch
+COPY --from=builder --chown=65534:65534 /out/astrx /astrx
 # The data directory must exist in the image; a scratch image has no mkdir, so
 # it is COPYed as an empty, correctly-owned tree from the builder. A fresh named
 # volume inherits this ownership, which is what lets the unprivileged user write.
@@ -72,7 +68,7 @@ COPY --from=builder --chown=65534:65534 /emptydir /data
 USER 65534:65534
 VOLUME ["/data"]
 EXPOSE 8803
-ENTRYPOINT ["/websearch"]
+ENTRYPOINT ["/astrx", "websearch"]
 CMD ["serve", "--db", "/data/web.db", "--host", "0.0.0.0", "--port", "8803"]
 
 # ---------------------------------------------------------------------------
@@ -80,12 +76,12 @@ CMD ["serve", "--db", "/data/web.db", "--host", "0.0.0.0", "--port", "8803"]
 # ---------------------------------------------------------------------------
 FROM scratch AS onioncrawler
 COPY --from=builder /out/passwd /out/group /etc/
-COPY --from=builder --chown=65534:65534 /out/onioncrawler /onioncrawler
+COPY --from=builder --chown=65534:65534 /out/astrx /astrx
 COPY --from=builder --chown=65534:65534 /emptydir /data
 USER 65534:65534
 VOLUME ["/data"]
 EXPOSE 8802
-ENTRYPOINT ["/onioncrawler"]
+ENTRYPOINT ["/astrx", "onioncrawler"]
 CMD ["search", "--db", "/data/crawl.db", "--host", "0.0.0.0", "--port", "8802"]
 
 # ---------------------------------------------------------------------------
@@ -93,12 +89,12 @@ CMD ["search", "--db", "/data/crawl.db", "--host", "0.0.0.0", "--port", "8802"]
 # ---------------------------------------------------------------------------
 FROM scratch AS torrentds
 COPY --from=builder /out/passwd /out/group /etc/
-COPY --from=builder --chown=65534:65534 /out/torrentds /torrentds
+COPY --from=builder --chown=65534:65534 /out/astrx /astrx
 COPY --from=builder --chown=65534:65534 /emptydir /data
 USER 65534:65534
 VOLUME ["/data"]
 EXPOSE 8804 8805
-ENTRYPOINT ["/torrentds"]
+ENTRYPOINT ["/astrx", "torrentds"]
 CMD ["search", "--db", "/data/torrentds.db", "--host", "0.0.0.0", "--port", "8804"]
 
 # ---------------------------------------------------------------------------
@@ -106,7 +102,7 @@ CMD ["search", "--db", "/data/torrentds.db", "--host", "0.0.0.0", "--port", "880
 # ---------------------------------------------------------------------------
 FROM scratch AS suitedash
 COPY --from=builder /out/passwd /out/group /etc/
-COPY --from=builder --chown=65534:65534 /out/suitedash /suitedash
+COPY --from=builder --chown=65534:65534 /out/astrx /astrx
 COPY --from=builder --chown=65534:65534 /emptydir /data
 USER 65534:65534
 VOLUME ["/data"]
@@ -115,8 +111,8 @@ EXPOSE 8806
 # own `--check` probes every configured service and exits non-zero if any is
 # DOWN. The scratch engines below it are covered BY this dashboard.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-    CMD ["/suitedash", "--check", "--quiet"]
-ENTRYPOINT ["/suitedash"]
+    CMD ["/astrx", "suitedash", "--check", "--quiet"]
+ENTRYPOINT ["/astrx", "suitedash"]
 CMD ["--host", "0.0.0.0", "--port", "8806"]
 
 # ---------------------------------------------------------------------------
@@ -127,13 +123,13 @@ FROM alpine:3.20 AS gitweb
 RUN apk add --no-cache git \
     && adduser -S -u 65533 -H -s /sbin/nologin gitweb \
     && mkdir -p /repos && chown 65533 /repos
-COPY --from=builder /out/gitweb /usr/local/bin/gitweb
+COPY --from=builder /out/astrx /usr/local/bin/astrx
 USER 65533
 VOLUME ["/repos"]
 EXPOSE 8801
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD ["/usr/local/bin/gitweb", "--version"]
-ENTRYPOINT ["/usr/local/bin/gitweb"]
+    CMD ["/usr/local/bin/astrx", "gitweb", "--version"]
+ENTRYPOINT ["/usr/local/bin/astrx", "gitweb"]
 CMD ["--root", "/repos", "--host", "0.0.0.0", "--port", "8801", "--quiet"]
 
 # ---------------------------------------------------------------------------
