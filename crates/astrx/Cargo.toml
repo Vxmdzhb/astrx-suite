@@ -41,6 +41,16 @@ websearch = { path = "../websearch" }
 # which build they have.
 [features]
 default = []
+# The engines' getrandom-backed entropy, forwarded so `--features rand` means
+# the same here as in each engine (and the CI feature matrix applies to this
+# crate on its own).
+rand = [
+    "gitweb/rand",
+    "onioncrawler/rand",
+    "suitedash/rand",
+    "torrentds/rand",
+    "websearch/rand",
+]
 net = [
     "gitweb/net",
     "onioncrawler/net",
