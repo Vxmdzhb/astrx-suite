@@ -9,11 +9,15 @@ which is the point: this tree is 100% Rust.
 ## Regenerating a golden
 
 The generators (`tests/regen_*.py`) and the reference implementation
-(`legacy-python/`) were removed once the migration completed. Both are preserved
-in git history at the tag:
+(`legacy-python/`) were removed once the migration completed, in the commit
+"removing python" of the astrx-suite repository
+(https://github.com/Vxmdzhb/astrx-suite). Both are preserved in its history,
+in that commit's parent:
 
-    git show python-reference-final --stat
-    git checkout python-reference-final -- legacy-python crates/<crate>/tests/regen_goldens.py
+    git clone https://github.com/Vxmdzhb/astrx-suite && cd astrx-suite
+    ref=$(git log --format=%H -1 --grep='^removing python$')^
+    git show "$ref" --stat
+    git checkout "$ref" -- legacy-python crates/<crate>/tests/regen_goldens.py
 
 Then follow the header comment in the generator (each documents its
 `PYTHONPATH=legacy-python/<pkg> python3 …` invocation), regenerate, and drop the
