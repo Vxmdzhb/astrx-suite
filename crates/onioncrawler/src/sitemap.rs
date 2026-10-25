@@ -152,10 +152,11 @@ fn decode_entities(chars: &[char]) -> Option<String> {
                 _ => {
                     if let Some(hex) = ent.strip_prefix("#x") {
                         char::from_u32(u32::from_str_radix(hex, 16).ok()?)?
-                    } else if let Some(dec) = ent.strip_prefix('#') {
-                        char::from_u32(dec.parse().ok()?)?
                     } else {
-                        return None; // undefined named entity
+                        // Anything else that is not `#<decimal>` is an
+                        // undefined named entity: reject the document.
+                        let dec = ent.strip_prefix('#')?;
+                        char::from_u32(dec.parse().ok()?)?
                     }
                 }
             };
@@ -257,12 +258,9 @@ fn parse_xml(text: &str, max_locs: usize) -> Option<(SitemapKind, Vec<String>)> 
                         i = find_from(&chars, i + 4, "-->")? + 3;
                     } else if at(&chars, i, "<![CDATA[") {
                         let end = find_from(&chars, i + 9, "]]>")?;
-                        if let Some(top) = stack.last_mut() {
-                            if top.is_loc && !top.child_seen {
-                                top.acc.extend(&chars[i + 9..end]);
-                            }
-                        } else {
-                            return None; // CDATA outside the root
+                        let top = stack.last_mut()?; // CDATA outside the root: reject
+                        if top.is_loc && !top.child_seen {
+                            top.acc.extend(&chars[i + 9..end]);
                         }
                         i = end + 3;
                     } else {
