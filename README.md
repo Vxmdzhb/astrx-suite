@@ -47,7 +47,8 @@ trackers and the metadata fetch client.
 **The migration is done.** `legacy-python/` is gone: every engine reached parity,
 and the tree now contains **no Python at all** — 176 `.rs` files and not one
 `.py`. The reference implementation and the golden generators are preserved in
-git history at the tag `python-reference-final` (see `crates/GOLDENS.md`), so a
+git history, in the parent of the commit "removing python" (see
+`crates/GOLDENS.md`), so a
 byte-identity golden can still be regenerated if it ever needs to be; the frozen
 literals in `tests/xcheck_*.rs` are now the specification.
 
