@@ -1,8 +1,7 @@
 # Tor ingress for the astrx-suite.
 #
-# The Rust engines are static musl binaries, so the deployment no longer carries
-# a Python base image; Tor rides on alpine instead — the same libc the engines
-# are linked against, and the smallest image that ships a packaged tor daemon.
+# The engines are static musl binaries, and Tor runs on alpine (the same libc
+# they're linked against, and the smallest image with a packaged tor).
 # Alpine's `tor` package creates the unprivileged `tor` user.
 FROM alpine:3.20
 

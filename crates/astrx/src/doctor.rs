@@ -192,9 +192,9 @@ impl Default for DoctorConfig {
             db_dir: ".".to_string(),
             repo_root: String::new(),
             host: "127.0.0.1".to_string(),
-            // A suite node that drops below 1 GiB is roughly one crawl sweep
-            // from a truncated snapshot publish: `write_atomic` needs room for
-            // the *whole* new blob beside the old one before it renames.
+            // Below 1 GiB, a node is about one crawl away from a failed snapshot:
+            // `write_atomic` needs room for the whole new file next to the old one
+            // before it renames.
             min_free_mb: 1024,
             tor_host: "127.0.0.1".to_string(),
             // Off unless asked for. Most suite nodes run no Tor at all (gitweb,
@@ -426,8 +426,8 @@ pub fn run(argv: &[String]) -> ExitCode {
     let (summary, failed) = summarize(&outcomes);
     println!("\n{summary}");
     if failed {
-        // Named explicitly: an operator who sees only the tail of a log needs to
-        // know the exit code meant "a check failed", not "doctor crashed".
+        // Say it plainly: someone reading only the end of a log needs to know the
+        // exit code means "a check failed", not "doctor crashed".
         println!("astrx doctor: FAILED — see the FAIL line(s) above");
         return ExitCode::from(1);
     }

@@ -5,27 +5,20 @@ edition = "2021"
 rust-version = "1.89"
 license = "MIT"
 repository = "https://github.com/Vxmdzhb/astrx-suite"
-# Not published to crates.io, and the declaration is load-bearing rather than
-# decorative: the suite's crates depend on each other through their git repositories,
-# and cargo-deny counts a versionless path dependency as a wildcard unless the
-# crate says it is unpublishable — because crates.io would reject a path
-# dependency anyway. Saying so here is also the only thing that stops a stray
-# `cargo publish` in one of these directories from reaching the registry.
+# Not published to crates.io: the suite's crates depend on each other
+# through their git repositories, and this also stops a stray `cargo publish`.
 publish = false
 description = "The single astrx entrypoint: dispatches to the five suite engines, plus `astrx doctor` for operator diagnostics."
 
-# This crate is a multiplexer and a diagnostic tool; it owns no engine logic of
-# its own. It depends on the five engine crates and calls each one's
+# This crate only dispatches and diagnoses; it has no engine logic of its
+# own. It depends on the five engine crates and calls each one's
 # `cli::run(args)`, so `astrx gitweb --root /repos` and `gitweb --root /repos`
-# execute the *same* parser and produce byte-identical output. Nothing is
-# re-implemented here, so nothing can drift.
+# run the same parser and print the same output.
 #
-# Third-party dependency count is still zero: every dependency below is a
-# first-party path dependency, and the two vetted crates (tokio, getrandom) come
-# in only through the engines' own opt-in `net`/`rand` features, exactly as they
-# did before this crate existed. Versions are not declared via
-# `[workspace.dependencies]` so the manifest parses on pre-1.64 Cargo — see the
-# root Cargo.toml note.
+# Still no third-party dependencies of its own: tokio and getrandom come in
+# only through the engines' opt-in `net` and `rand` features. Versions aren't
+# declared through `[workspace.dependencies]`, so the manifest parses on old
+# Cargo (see the root Cargo.toml).
 [dependencies]
 crawlcore = { git = "https://github.com/Vxmdzhb/crawlcore", branch = "main", version = "0.1" }
 gitweb = { git = "https://github.com/Vxmdzhb/gitweb", branch = "main", version = "0.1" }

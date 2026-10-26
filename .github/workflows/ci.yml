@@ -1,19 +1,12 @@
-#  The gate that already exists, run on every push.
+# CI for the suite, on every push and once a week.
 #
-#   `astrx-suite/install_rust_suite.sh --ci` has always been green — but nothing
-#   ran it, and that is how a whole audit's worth of fixes went missing from the
-#   remote without anyone noticing. This runs it, plus the two things a laptop
-#   cannot check: that the suite builds on the declared MSRV, and that it behaves
-#   the same across `git` versions.
+# Runs install_rust_suite.sh --ci, plus what a laptop can't easily check: the
+# build on the declared minimum Rust version, and the zero-dependency claim.
 #
-#   Design notes:
-#     * Every job is `--locked`, so a lockfile drift fails the build instead of
-#       silently resolving to something new.
-#     * The zero-dependency invariant is ASSERTED, not assumed. It is the
-#       project's central claim; a claim nothing checks is a claim that decays.
-#     * The git matrix exists because a real failure came from it: git renders a
-#       zero UTC offset as `+00:00` up to 2.43 and as `Z` after, which changed
-#       `gitweb`'s public output under an operator's routine upgrade.
+#   * Every job is `--locked`, so a lockfile out of date fails the build
+#     instead of quietly resolving something new.
+#   * The zero-dependency property is checked, not assumed: it is the
+#     project's central claim.
 name: astrx-suite
 
 on:
@@ -32,24 +25,16 @@ defaults:
 env:
   CARGO_TERM_COLOR: always
 
-  # The toolchain the lint bar is measured against. PINNED, and bumped by hand.
+  # The toolchain the lint bar is measured against: pinned, and raised by hand.
   #
-  # `-D warnings` against a floating `stable` means Rust's release train decides
-  # when this repository's CI goes red. Every six weeks clippy gains lints, they
-  # fire on code that has not changed, and a build breaks with no commit behind
-  # it — which is how a red CI becomes something people learn to ignore. That
-  # already happened here: a 1.9x release added a lint, and all five clippy
-  # tiers plus the installer failed on a tree that had just passed locally.
+  # With `-D warnings` on a floating stable, every new clippy release would
+  # turn CI red on code that hasn't changed. `clippy-floating` below runs the
+  # same lints on current stable without gating, so new lints arrive as a
+  # report. When it shows findings: fix them, then raise this number.
   #
-  # It must be RUSTUP_TOOLCHAIN rather than the action's version argument:
-  # `astrx-suite/rust-toolchain.toml` pins channel = "stable" and rustup honours
-  # that file over whatever an action selected. That is the same trap that made
-  # the MSRV job a false pass for months, and it silently defeats a pin here in
-  # exactly the same way.
-  #
-  # `clippy-floating` below runs the same lints on real stable and does NOT
-  # gate, so a new lint arrives as a report to act on rather than a broken
-  # build. When it goes yellow: fix the findings, then raise this number.
+  # It has to be RUSTUP_TOOLCHAIN rather than the action's version argument:
+  # rust-toolchain.toml pins channel = "stable", and rustup prefers that file
+  # over whatever the action selected.
   LINT_TOOLCHAIN: '1.95.0'
 
   # NB: RUSTFLAGS is deliberately NOT set here. A workflow-level `-D warnings`
@@ -102,25 +87,17 @@ jobs:
       - run: cargo clippy --workspace --all-targets --locked ${{ matrix.features }} -- -D warnings
         env: { RUSTUP_TOOLCHAIN: '${{ env.LINT_TOOLCHAIN }}' }
 
-  # ------------------------------------ the same lints, on whatever stable is
+  # ------------------------------------ the same lints, on current stable
   #
-  # The early warning that `LINT_TOOLCHAIN` has fallen behind. It reports what a
-  # newer clippy dislikes; the fix is to address the findings and raise the pin.
+  # An early warning that LINT_TOOLCHAIN has fallen behind. It reports what a
+  # newer clippy flags; the fix is to address the findings and raise the pin.
   #
-  # It does NOT go red to do that. The first version of this job ran clippy with
-  # `-D warnings` and relied on `continue-on-error` — which stops the workflow
-  # failing but still paints a red X in the checks list, so an advisory job was
-  # indistinguishable at a glance from a broken build. That is the same "red CI
-  # nobody reads" failure this whole file has been working against, just wearing
-  # a different hat.
+  # It doesn't go red for that: warnings stay warnings, findings become
+  # annotations and a job summary, and the step exits 0. Code that no longer
+  # compiles on new stable is a real failure, and that does exit non-zero.
   #
-  # So: warnings stay warnings, findings become GitHub annotations and a job
-  # summary, and the step exits 0. A HARD failure — code that no longer compiles
-  # on new stable — is a different thing and does exit non-zero, because that is
-  # not an opinion about style.
-  #
-  # Only the two tiers that between them cover every line: the zero-dependency
-  # build and the full one. Five tiers of advisory output is noise.
+  # Two tiers cover every line between them: the zero-dependency build and the
+  # full one.
   clippy-floating:
     name: clippy on current stable (advisory)
     runs-on: ubuntu-latest
@@ -217,10 +194,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.89.0
       - uses: Swatinem/rust-cache@v2
         with: { workspaces: . }
-      # `astrx-suite/rust-toolchain.toml` pins channel = "stable", and rustup
-      # honours that file over whatever toolchain an action selected — so this
-      # job used to install the MSRV and then build with stable, passing
-      # while testing nothing. RUSTUP_TOOLCHAIN takes precedence over the file.
+      # rust-toolchain.toml pins channel = "stable", which rustup prefers over the
+      # toolchain an action installs, so the MSRV has to be forced with
+      # RUSTUP_TOOLCHAIN, which wins over the file.
       - name: Prove the toolchain really is the MSRV
         run: rustc --version | tee /dev/stderr | grep -q '1\.89\.'
         env: { RUSTUP_TOOLCHAIN: '1.89.0' }
@@ -236,25 +212,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      # The member list is read from the manifest rather than typed out, because
-      # a hand-written list silently stops covering a crate the day one is
-      # added — and it already had: `astrx`, the entrypoint that depends on all
-      # five engines, was missing, so the one crate whose whole job is to pull
-      # the others in was the one nobody checked.
+      # The member list is read from the manifest, so a new crate is covered
+      # automatically.
       #
-      # The filter is anchored to the workspace members too. `grep -v crawlcore`
-      # dropped any line CONTAINING that string, so a third-party crate named
-      # `crawlcore-anything` would have been waved through; matching the tree's
-      # `name v0.0.0` field against the member list cannot be fooled that way.
+      # The filter matches the tree's `name v0.0.0` field against that list
+      # exactly, so a third-party crate whose name merely contains a member's name
+      # can't slip through.
       - name: Every crate resolves to nothing but first-party code by default
         run: |
           set -euo pipefail
-          # Each member's [package] name, straight from its own manifest. Not
-          # `cargo metadata | sed`: that JSON has a "name" field on every TARGET
-          # and every dependency too, so a naive match yields the 70-odd test
-          # binaries as well, and `cargo tree -p xcheck_json` then fails with
-          # "did not match any packages" — which the old `|| true` reported as
-          # a clean zero.
+          # Each member's [package] name, from its own manifest. Not from
+          # `cargo metadata`: its JSON has a "name" on every target and dependency too,
+          # which would also pick up every test binary.
           members=$(for f in crates/*/Cargo.toml; do
             [ -f "$f" ] || continue
             sed -n '/^\[package\]/,/^\[/ s/^name *= *"\([^"]*\)".*/\1/p' "$f"

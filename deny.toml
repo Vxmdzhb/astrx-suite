@@ -5,16 +5,16 @@
 #   cargo deny check advisories      # just the RustSec audit
 #   cargo deny check bans licenses   # just the supply-chain / licence gates
 #
-# This is the supply-chain complement to the CI in .github/workflows/ci.yml:
-# CI proves the *default* build is dependency-free, while cargo-deny governs the
-# handful of vetted crates the opt-in `rand` / `net` features are allowed to add
-# (tokio + getrandom and their small transitive closure). Run it on the full
-# feature surface so those deps are actually in the graph being audited.
+# The supply-chain side of CI (.github/workflows/ci.yml): CI proves the
+# default build has no dependencies, and cargo-deny governs the few vetted
+# crates the opt-in `rand` / `net` features may add (tokio, getrandom and
+# their small transitive closure). It runs on all features, so those crates
+# are in the graph it audits.
 # ─────────────────────────────────────────────────────────────────────────────
 
 [graph]
-# Audit the whole dependency surface, not just the (empty) default build —
-# otherwise there would be nothing to check, since `default = []` is stdlib-only.
+# Audit all features: the default build uses only the standard library, so
+# there would be nothing to check.
 all-features = true
 
 # ── Security advisories (RustSec) ────────────────────────────────────────────
@@ -33,22 +33,14 @@ ignore = [
 ]
 
 # ── Licences ─────────────────────────────────────────────────────────────────
-# Permissive-only, and exactly the four licences the closure actually contains:
-# MIT / Apache-2.0 for the dual-licensed crates, Unicode-3.0 for `unicode-ident`,
-# the LLVM-exception Apache variant for `wasi`. Nothing else.
+# Permissive only, and exactly the four licences the closure contains: MIT /
+# Apache-2.0 for the dual-licensed crates, Unicode-3.0 for `unicode-ident`,
+# and the LLVM-exception Apache variant for `wasi`.
 #
-# This list used to also carry ISC, BSD-2-Clause, BSD-3-Clause, Zlib and 0BSD,
-# on the theory that a future vetted dependency under one of them should not
-# need a config change. cargo-deny reports every allowance it never matches, so
-# that theory cost five `license-not-encountered` warnings on every single run —
-# and a check that always prints warnings is a check people stop reading.
-#
-# The theory was backwards anyway. Admitting a new licence to a project whose
-# entire runtime closure is two crates should be a deliberate, reviewed act,
-# exactly like admitting a new crate. Copyleft (GPL/LGPL/MPL/AGPL) is absent for
-# that reason; permissive-but-unused licences deserve the same treatment. A
-# dependency under ISC now fails here, names the licence, and asks a human —
-# which is the point.
+# Nothing else is pre-approved. Admitting a new licence should be a
+# deliberate, reviewed decision, like admitting a new crate: a dependency
+# under any other licence fails here, names it, and asks a human. (Unused
+# allowances would also print a warning on every run.)
 [licenses]
 version = 2
 confidence-threshold = 0.9
@@ -62,23 +54,21 @@ exceptions = [
   # { name = "some-crate", allow = ["SomeOtherLicense"] },
 ]
 
-# ── Bans — keep the dependency set tiny and single-versioned ─────────────────
-# The design intent: the pure wire core has ZERO third-party deps, and the live
-# node adds only two vetted crates. As of today the *entire* allowed runtime
-# closure (under --all-features) is:
+# ── Bans: keep the dependency set tiny and single-versioned ─────────────────
+# The wire core has no third-party dependencies, and the live node adds two
+# vetted crates. With --all-features, the whole allowed runtime closure is:
 #
-#     tokio            — async runtime          (net feature)
-#     getrandom        — CSPRNG                 (rand feature)
+#     tokio            async runtime          (net feature)
+#     getrandom        CSPRNG                 (rand feature)
 #     └─ transitively:  libc, mio, socket2, bytes, pin-project-lite, cfg-if,
 #                       wasi, windows-sys/windows-link (platform shims), and the
 #                       build-time proc-macro trio proc-macro2 / quote / syn
 #                       (+ tokio-macros, unicode-ident).
 #
-# `multiple-versions` + `wildcards` keep that closure lean and honest; the
-# `deny` list below pre-empts the heavy crates we never intend to pull in, so
-# any attempt to add TLS/crypto stacks or an in-process libgit2 (gitweb is
-# argv-only git by design) fails loudly in review rather than silently bloating
-# the tree.
+# `multiple-versions` and `wildcards` keep that closure small and exact; the
+# `deny` list below blocks the heavy crates we never want, so adding a TLS or
+# crypto stack or an in-process libgit2 (gitweb only ever runs the git
+# binary) fails in review.
 [bans]
 multiple-versions = "deny"
 wildcards = "deny"

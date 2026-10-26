@@ -152,8 +152,7 @@ fn every_engine_serves_metrics_suitedash_can_parse() {
 
 #[test]
 fn the_shared_request_block_is_present_and_identically_named_on_every_engine() {
-    // The point of the shared block: one query works against any engine with
-    // only the prefix changed. Before this, only gitweb had any of these.
+    // One query works against any engine with only the prefix changed.
     for (engine, body) in all_engines() {
         let map = parsed(&body);
         assert_has(
@@ -204,8 +203,8 @@ fn every_metric_suitedash_is_configured_to_surface_actually_exists() {
 
 #[test]
 fn websearch_reports_the_searches_counter_the_dashboard_asks_for() {
-    // Regression test for the shipped gap, pinned to a value rather than mere
-    // presence: `websearch_searches_total` must move when searches happen.
+    // Pinned to a value, not just presence: `websearch_searches_total` must go
+    // up when searches happen.
     let before = parsed(&websearch_metrics())
         .get("websearch_searches_total")
         .copied()

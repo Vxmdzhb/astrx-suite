@@ -1,9 +1,9 @@
-//! `astrx` — one binary for the whole suite.
+//! `astrx`: one binary for the whole suite.
 //!
 //! The suite is five engines (`gitweb`, `onioncrawler`, `websearch`,
-//! `torrentds`, `suitedash`). Each still ships its own binary, because every
-//! unit file, container `CMD` and runbook in existence names one. This crate
-//! adds a *single* entrypoint on top of them:
+//! `torrentds`, `suitedash`). Each still builds its own binary too, since unit
+//! files, container commands and runbooks name them. This crate adds one
+//! entrypoint on top:
 //!
 //! ```text
 //! astrx gitweb --root /repos --port 8801
@@ -11,22 +11,21 @@
 //! astrx doctor --db-dir /data --repo-root /repos
 //! ```
 //!
-//! Nothing is re-implemented here. [`dispatch`] inspects exactly one token — the
-//! engine name — and hands the entire remainder of the command line to that
-//! engine's `cli::run`, which is the same function its standalone binary calls.
-//! `astrx websearch crawl …` and `websearch crawl …` therefore share one
-//! parser, one help text and one set of exit codes, and cannot drift.
+//! Nothing is reimplemented. [`dispatch`] looks at exactly one token, the
+//! engine name, and hands the rest of the command line to that engine's
+//! `cli::run`, the same function its own binary calls. So `astrx websearch
+//! crawl …` and `websearch crawl …` share one parser, one help text and one
+//! set of exit codes.
 //!
-//! [`doctor`] is the one piece of behaviour that is genuinely new: the
-//! cross-engine diagnostics an operator wants at 3am, in one command with one
-//! exit code.
+//! [`doctor`] is the new part: cross-engine diagnostics in one command with
+//! one exit code.
 //!
 //! [`supervise`] (`astrx run`) starts several engine roles as children of
-//! this one binary and keeps them running, so one container can hold every
-//! role that shares its network instead of one container per role.
+//! this binary and keeps them running, so one container can hold every role
+//! that shares its network.
 //!
-//! The crate holds no third-party dependencies: it depends on the five engine
-//! crates and on `crawlcore`, all first-party path dependencies.
+//! No third-party dependencies of its own: it depends on the five engines and
+//! `crawlcore`, all first-party.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]

@@ -137,8 +137,8 @@ fn a_good_snapshot_loads_and_is_summarised() {
 
     let o = db_check("websearch.db", path, Snapshot::WebSearch).run();
     assert_eq!(o.status, Status::Pass, "{o:?}");
-    // The count is the useful part: "loads" plus "0 docs" is a different
-    // incident from "loads" plus "4.2M docs".
+    // The count matters: "loads" with "0 docs" is a different problem from
+    // "loads" with "4.2M docs".
     assert!(o.detail.contains("snapshot loads"), "{o:?}");
     assert!(o.detail.contains("1 docs"), "{o:?}");
 }
@@ -321,35 +321,23 @@ fn port_check(port: u16, expect_prefix: &str) -> PortCheck {
     }
 }
 
-/// A port that was free when this returned, found by binding one and letting it
-/// go.
+/// A port that was free when this returned, found by binding one and letting
+/// it go.
 ///
-/// It is free at that instant and no longer. Nothing holds it once this returns,
-/// so anything on the machine that asks for an ephemeral port can be handed this
-/// exact number a microsecond later. Inside this binary that is a live
-/// possibility, not a hypothetical: libtest runs up to `available_parallelism()`
-/// tests at a time — 2 on the 2-core CI runner — and several tests here bind
-/// `127.0.0.1:0` (`spawn_metrics_server`, `spawn_silent_server`, this function),
-/// so whichever test shares the runner with the caller is drawing from the same
-/// pool at the same moment. It stays rare because Linux allocates out of
-/// `ip_local_port_range` — 32768–60999 here — by walking the range rather than
-/// by handing back what was just released, but "rare" is how a test earns a
-/// once-a-month failure nobody can reproduce.
+/// It's free at that moment only. Several tests here bind `127.0.0.1:0` and
+/// libtest runs them in parallel, so another test can be handed the same
+/// number right after. Linux walks its ephemeral range rather than reusing the
+/// port just released, so this is rare, but rare is how a test fails once a
+/// month for no visible reason. Other crates' tests don't interfere: cargo
+/// runs one test binary at a time.
 ///
-/// What does *not* race with it is the rest of the workspace: `cargo test` runs
-/// each test binary to completion before starting the next, so no other crate's
-/// sockets are open while these are.
-///
-/// Go through [`on_a_free_port`] wherever a squatter would change the verdict,
-/// which is every caller that asserts on a particular status — a port taken
-/// between the scavenge and the check turns the expected "is free" `Pass` into a
-/// `Warn`, or into an "already running" `Pass`.
-/// `every_check_a_default_config_builds_actually_runs` scavenges five ports
-/// directly instead, because there no squatter can reach its assertion: it only
-/// rejects `Fail`, and an occupied port cannot produce one. `PortCheck::run`
-/// returns `Fail` solely when `bind` fails with something other than
-/// `AddrInUse`; a port that is merely in use is reported as `Warn`, or as `Pass`
-/// if it answers as the expected engine.
+/// Use [`on_a_free_port`] wherever a squatter would change the verdict, which
+/// is every caller that asserts a particular status: a port taken in between
+/// turns the expected "is free" `Pass` into a `Warn`, or an "already running"
+/// `Pass`. `every_check_a_default_config_builds_actually_runs` takes five
+/// ports directly instead: it only rejects `Fail`, and `PortCheck::run` only
+/// returns `Fail` when `bind` fails with something other than `AddrInUse`. A
+/// port in use gives `Warn`, or `Pass` if it answers as the expected engine.
 fn free_port() -> u16 {
     let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let p = l.local_addr().unwrap().port();
@@ -357,15 +345,14 @@ fn free_port() -> u16 {
     p
 }
 
-/// Run `check` against a freshly scavenged [`free_port`], up to three times,
-/// stopping at the first outcome `settled` accepts; return the last one for the
-/// caller to assert on as usual.
+/// Run `check` on a fresh [`free_port`], up to three times, stopping at the
+/// first outcome `settled` accepts, and return the last one for the caller to
+/// assert on as usual.
 ///
-/// This does not make the scavenge race-free — nothing short of holding the port
-/// open would, and holding it open is the opposite of what these two checks need
-/// to see. It makes the verdict depend on an outcome observed on a port that was
-/// actually unoccupied, and leaves a real regression failing on the third
-/// attempt with the check's own message.
+/// This doesn't make it race-free (only holding the port open would, and
+/// these checks need it closed). It makes the verdict come from a port that
+/// really was free, while a real regression still fails on the third try with
+/// the check's own message.
 fn on_a_free_port<T>(mut check: impl FnMut(u16) -> T, settled: impl Fn(&T) -> bool) -> T {
     let mut out = check(free_port());
     for _ in 0..2 {
@@ -507,9 +494,9 @@ fn df_parsing_survives_a_device_name_that_wraps_onto_its_own_line() {
                   /dev/sda1     41153856 8110272  30931968      21% /\n";
     assert_eq!(parse_df_available_kib(normal), Some(30_931_968));
 
-    // `df` wraps a long device name; the numbers land on the next line. Reading
-    // the 4th token of the *first* line here would silently report the wrong
-    // number (or none), i.e. a disk-space check that never fires.
+    // `df` wraps a long device name and the numbers land on the next line.
+    // Reading the 4th token of the first line would report the wrong number, or
+    // none.
     let wrapped = "Filesystem 1024-blocks Used Available Capacity Mounted on\n\
                    /dev/mapper/a-very-long-volume-group-name-here\n\
                    \x2041153856 8110272 30931968 21% /data\n";

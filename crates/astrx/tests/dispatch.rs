@@ -1,13 +1,10 @@
-//! The `astrx` dispatcher's contract: **everything after the subcommand reaches
-//! the engine byte-for-byte**.
+//! The dispatcher's promise: **everything after the subcommand reaches the
+//! engine byte for byte.**
 //!
-//! Every documented invocation in the README, `deploy/FLEET.md`, the compose
-//! file and every operator's shell history has to keep working with `astrx ` in
-//! front of it. The way that breaks is not a crash — it is a dispatcher that
-//! helpfully normalises `--flag=value`, drops a `--`, or grabs a flag it thinks
-//! is its own, and an engine that then does something subtly different. These
-//! tests pin the argument vector itself, so that regression is caught here
-//! rather than by a crawl that quietly used the wrong seed file.
+//! Every documented command has to keep working with `astrx ` in front of it.
+//! The way that breaks isn't a crash but a dispatcher that "helpfully"
+//! rewrites `--flag=value`, drops a `--` or takes a flag it thinks is its own.
+//! These tests pin the argument vector itself.
 
 #![cfg(feature = "net")]
 

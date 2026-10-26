@@ -1,18 +1,15 @@
 //! The `astrx <engine> …` argument multiplexer.
 //!
-//! Splitting the command line is a *pure* function ([`split`]) that never runs
-//! an engine, so the pass-through contract — everything after the subcommand
-//! reaches the engine byte-for-byte, in order, unmodified — is testable without
-//! binding a socket or touching a database. [`run`] is the thin wrapper that
-//! takes the split apart and calls the chosen engine's `cli::run`.
+//! Splitting the command line is a pure function ([`split`]) that never runs
+//! an engine, so the pass-through rule can be tested without binding a socket
+//! or opening a database. [`run`] takes the split apart and calls the chosen
+//! engine's `cli::run`.
 //!
-//! The contract that matters: **only the first token is ever inspected.** No
-//! flag reordering, no `--flag=value` splitting, no `--` stripping past the
-//! subcommand. A documented invocation such as
-//! `websearch crawl --seeds s.txt -- --not-a-flag` therefore behaves identically
-//! as `astrx websearch crawl --seeds s.txt -- --not-a-flag`. Anything cleverer
-//! here would silently change the meaning of commands already in unit files and
-//! runbooks, which is the one thing this crate exists not to do.
+//! The rule: **only the first token is ever looked at.** No flag reordering,
+//! no `--flag=value` splitting, no `--` stripping after the subcommand. So
+//! `websearch crawl --seeds s.txt -- --not-a-flag` and
+//! `astrx websearch crawl --seeds s.txt -- --not-a-flag` behave the same, and
+//! commands already written in unit files and runbooks keep their meaning.
 
 use std::process::ExitCode;
 
@@ -86,16 +83,15 @@ pub enum Action {
 
 /// Split a command line into "what astrx should do" and "what to pass on".
 ///
-/// `argv` excludes `argv[0]`. Only the leading token is interpreted:
+/// `argv` excludes `argv[0]`. Only the first token is interpreted:
 ///
 /// * `-h` / `--help` / `help` → the engine list.
 /// * `-V` / `--version` → the suite version.
-/// * `--` → the *next* token is the subcommand; the `--` itself is consumed,
-///   which is what lets an operator write `astrx -- doctor --json` and be sure
-///   the `doctor` is read as a subcommand and not as a value.
-/// * any other token starting with `-` → a usage error naming it, because
-///   silently forwarding an unknown astrx-level flag to an engine produces that
-///   engine's error message about a flag the operator never aimed at it.
+/// * `--` → the *next* token is the subcommand and the `--` is consumed, so
+///   `astrx -- doctor --json` always reads `doctor` as the subcommand.
+/// * any other token starting with `-` → a usage error naming it. Forwarding
+///   an unknown flag to an engine would only produce a confusing error from
+///   that engine.
 /// * anything else → the subcommand; **all** remaining tokens are `rest`.
 #[must_use]
 pub fn split(argv: &[String]) -> Action {

@@ -431,11 +431,10 @@ fn resolve(addr: &str) -> Option<SocketAddr> {
 
 /// Free space on the filesystem holding the data directory.
 ///
-/// The suite publishes every snapshot by writing a full copy beside the old one
-/// and renaming, so the space needed at commit time is the size of the *whole*
-/// index, not the delta. A node that fills up does not degrade: `write_atomic`
-/// fails, the crawl keeps running, and the last good snapshot silently stops
-/// advancing.
+/// Every snapshot is published by writing a full copy next to the old one and
+/// renaming, so the space needed is the size of the whole index, not the
+/// change. A full disk doesn't slow things down; `write_atomic` fails, the
+/// crawl keeps running, and the last good snapshot quietly stops advancing.
 #[derive(Clone, Debug)]
 pub struct DiskSpaceCheck {
     /// Dotted report name.
@@ -503,9 +502,8 @@ impl Check for DiskSpaceCheck {
 
 /// The `Available` (4th) column of `df -P -k`'s data row, in KiB.
 ///
-/// Split as its own function because `df`'s first column can wrap onto its own
-/// line for a long device name, and getting that wrong silently reports the
-/// wrong filesystem's free space.
+/// A function of its own because `df` puts a long device name on a line by
+/// itself, and reading the wrong line reports the wrong filesystem.
 #[must_use]
 pub fn parse_df_available_kib(text: &str) -> Option<u64> {
     let mut fields: Vec<&str> = Vec::new();
