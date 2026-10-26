@@ -1,29 +1,27 @@
-# astrx-suite — one multi-stage build for every Rust engine.
+# astrx-suite: one multi-stage build for every Rust engine.
 #
 #   docker build -f deploy/Dockerfile --target websearch -t astrx/websearch .
 #
-# The builder compiles ONE binary, `astrx`, which runs every engine
+# The builder compiles one binary, `astrx`, which runs every engine
 # (`astrx websearch …` is exactly `websearch …`: same parser, same code). The
 # `suite` target is what docker-compose.yml runs; the per-engine targets are
-# the same binary with the engine as its entrypoint, for hosts that run one
+# the same binary with the engine as entrypoint, for hosts that run one
 # engine each (deploy/FLEET.md).
 #
-# WHY THE IMAGES ARE EMPTY
-#   The suite has zero third-party dependencies by default and its only
-#   networking deps (tokio, getrandom) are pure Rust, so every engine links to a
-#   single statically-linked musl binary with no libc, no shell and no package
-#   manager underneath it. Four of the five run `FROM scratch`: the image is one
-#   executable, /etc/passwd, and a data directory. There is nothing to CVE-scan,
-#   nothing to shell into, and nothing to escalate with.
+# Why the images are nearly empty: with no third-party dependencies by
+# default, and only pure-Rust networking crates (tokio, getrandom), the binary
+# links statically against musl, with no libc, shell or package manager
+# underneath. Four of the five per-engine images are `FROM scratch`: one
+# executable, /etc/passwd and a data directory. Nothing to scan for CVEs,
+# nothing to shell into.
 #
-#   `gitweb` is the documented exception: it is a front-end for the real `git`
-#   binary (which it execs argv-only, never through a shell), so its image is
-#   alpine + git and nothing else.
+# `gitweb` is the exception: it is a front end for the real `git` binary
+# (run argv-only, never through a shell), so its image is alpine plus git.
 
 # ---------------------------------------------------------------------------
 # Builder — compiles the whole workspace once, statically, against musl.
 # ---------------------------------------------------------------------------
-FROM rust:1.83-alpine AS builder
+FROM rust:1.89-alpine AS builder
 
 # musl-dev provides the C runtime bits the linker needs; git lets the build
 # metadata resolve if a crate ever asks for it. Neither ships in the images.

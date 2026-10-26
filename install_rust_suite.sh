@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# install_rust_suite.sh — verify + build the astrx-suite Rust workspace.
+# install_rust_suite.sh: check and build the astrx-suite Rust workspace.
 #
 # Usage (any of):
 #   bash install_rust_suite.sh                 # from inside astrx-suite/
@@ -7,24 +7,22 @@
 #   bash install_rust_suite.sh [flags] [/path/to/astrx-suite]
 #
 # Flags:
-#   --ci          also run rustfmt --check + clippy (all 4 feature configs) as
-#                 hard gates. Requires the `clippy` and `rustfmt` components to
-#                 be present AND from the SAME toolchain as cargo/rustc.
-#   --build-only  compile only; skip the test run.
-#   --offline     pass --offline to cargo (use the pinned Cargo.lock, no network;
-#                 only works once the dependencies are already fetched).
+#   --ci          also run rustfmt --check and clippy (every feature config) as
+#                 hard gates. Needs the `clippy` and `rustfmt` components from
+#                 the same toolchain as cargo/rustc.
+#   --build-only  compile only; skip the tests.
+#   --offline     pass --offline to cargo (use the pinned Cargo.lock without
+#                 network; works once the dependencies are fetched).
 #
-# The DEFAULT path needs nothing but `rustc` + `cargo` (so `nix-shell -p rustc
-# cargo` is enough): it builds the workspace, runs the tests, and asserts the
-# zero-dependency property. Linting is opt-in via --ci precisely because a
-# missing or mismatched clippy-driver must never break a plain build.
+# The default needs only `rustc` and `cargo` (`nix-shell -p rustc cargo` is
+# enough): it builds the workspace, runs the tests and checks the
+# zero-dependency property. Linting is opt-in with --ci, so a missing or
+# mismatched clippy never breaks a plain build.
 #
-# REQUIRES a Rust toolchain >= 1.80 (the workspace MSRV). The optional `net`
-# tier pins tokio/mio/socket2, which themselves need Rust ~1.70+, so an older
-# rustc cannot build the suite — this script checks and tells you up front.
+# Needs Rust 1.89 or newer (the workspace MSRV); the script checks this first.
 set -euo pipefail
 
-MSRV_MINOR=80   # workspace MSRV is 1.80
+MSRV_MINOR=89   # workspace MSRV is 1.89
 
 DO_CI=0
 BUILD_ONLY=0
@@ -68,7 +66,6 @@ if [ "${RMAJOR:-0}" -lt 1 ] || { [ "$RMAJOR" -eq 1 ] && [ "${RMINOR:-0}" -lt "$M
   cat >&2 <<MSG
 
 error: rustc $RUSTV is older than this suite's MSRV (1.$MSRV_MINOR) — it cannot build the code.
-       (The optional 'net' tier also pins tokio/mio/socket2, which need Rust ~1.70+.)
 
   Get a current Rust, then re-run this script:
 
