@@ -5,7 +5,7 @@
 #   cargo deny check advisories      # just the RustSec audit
 #   cargo deny check bans licenses   # just the supply-chain / licence gates
 #
-# This is the supply-chain complement to the CI in .github/workflows/astrx-suite.yml:
+# This is the supply-chain complement to the CI in .github/workflows/ci.yml:
 # CI proves the *default* build is dependency-free, while cargo-deny governs the
 # handful of vetted crates the opt-in `rand` / `net` features are allowed to add
 # (tokio + getrandom and their small transitive closure). Run it on the full
@@ -85,22 +85,12 @@ wildcards = "deny"
 
 # `wildcards` exists to stop `foo = "*"` against a REGISTRY crate, where it means
 # "whatever crates.io serves today" and hands a third party the version choice.
-# It also counts a path dependency with no `version` field, because that is a
-# wildcard by the letter of the rule — and every crate here depends on crawlcore
-# as `{ path = "../crawlcore" }`, so the check failed on the workspace's own
-# internal wiring:
-#
-#     error[wildcard]: found 1 wildcard dependency for crate 'websearch'
-#       crawlcore = { path = "../crawlcore" }
-#
-# That is not the hazard the rule is for. A path dependency resolves to the
-# source sitting in this repository at this commit; there is no registry and no
-# third party in the loop. The alternative — writing `version = "0.1.0"`
-# alongside every path — buys nothing (these crates are not published) and adds a
-# line to edit in six manifests on every version bump.
-#
-# So path wildcards are exempt and registry wildcards are not, which is the
-# distinction the rule was always trying to draw.
+# By the letter of the rule it also counts a path dependency with no `version`
+# field. A path dependency (such as a fuzz harness pointing at the crate it
+# fuzzes) resolves to source in this repository at this commit: no registry and
+# no third party in the loop, so those are exempt. The suite's own crates come
+# from git instead, pinned by the lockfile and admitted by `allow-git` under
+# [sources].
 allow-wildcard-paths = true
 
 # Prefer the workspace-declared version of any crate that also appears deeper.
