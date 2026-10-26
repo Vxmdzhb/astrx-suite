@@ -1,8 +1,10 @@
 # astrx-suite
 
 The companion service suite for [AstrX](https://github.com/Vxmdzhb/astrx),
-being rewritten in **Rust** — one language for the whole suite. A Cargo
-workspace; each engine is a crate; `crawlcore` is the shared library. Zero
+being rewritten in **Rust** — one language for the whole suite. Each engine
+is a crate in a repository of its own, and so is `crawlcore`, the library they
+share; this repository assembles them into the single `astrx` binary and
+deploys it. Zero
 third-party dependencies by default (stdlib only), matching AstrX's austere,
 auditable ethos, and `#![forbid(unsafe_code)]` across the tree.
 
@@ -17,6 +19,21 @@ dependencies — `tokio` and `getrandom`. CI asserts `cargo tree
 The engines are standalone, loopback-bound services the CMS talks to over a
 small JSON API, and they're happy behind Tor. Nothing here needs JavaScript.
 
+## Repositories
+
+| Crate | Repository |
+|-------|------------|
+| `crawlcore` | https://github.com/Vxmdzhb/crawlcore |
+| `gitweb` | https://github.com/Vxmdzhb/gitweb |
+| `onioncrawler` | https://github.com/Vxmdzhb/onioncrawler |
+| `suitedash` | https://github.com/Vxmdzhb/suitedash |
+| `torrentds` | https://github.com/Vxmdzhb/torrentds |
+| `websearch` | https://github.com/Vxmdzhb/websearch |
+
+`crates/astrx` gets each as a git dependency, pinned to an exact commit by
+`Cargo.lock`. Each crate's own CI runs its tests, lints, MSRV build and
+zero-dependency check; this repository's CI checks the assembled binary.
+
 ## Layout
 
 ```
@@ -27,15 +44,9 @@ astrx-suite/
 ├── deny.toml             cargo-deny: advisories + tiny-dependency policy
 ├── SECURITY.md           threat model + hardening notes
 ├── crates/
-│   ├── crawlcore/        shared crawl library  ✅
-│   ├── torrentds/        DHT indexer + tracker (node, trackers, metadata) ✅
-│   ├── onioncrawler/     darknet (.onion/.i2p) crawler — engine complete ✅
-│   ├── websearch/        clearnet search engine — feature-complete ✅
-│   ├── suitedash/        no-JS ops/status dashboard ✅
-│   └── gitweb/           read-only no-JS git frontend ✅
+│   └── astrx/            the single binary: every engine, `doctor`, `run`
 ├── deploy/               FROM scratch images, Tor ingress, compose, FLEET.md ✅
-├── docker-compose.yml    one-command Tor deployment (no host ports)
-└── fuzz/                 cargo-fuzz harnesses for the wire parsers
+└── docker-compose.yml    one-command Tor deployment (no host ports)
 ```
 
 `torrentds` is organised in feature tiers so the auditable core stays dep-free:
@@ -47,8 +58,8 @@ trackers and the metadata fetch client.
 **The migration is done.** `legacy-python/` is gone: every engine reached parity,
 and the tree now contains **no Python at all** — 176 `.rs` files and not one
 `.py`. The reference implementation and the golden generators are preserved in
-git history, in the parent of the commit "removing python" (see
-`crates/GOLDENS.md`), so a
+git history, in the parent of the commit "removing python" (see each
+engine's `GOLDENS.md`), so a
 byte-identity golden can still be regenerated if it ever needs to be; the frozen
 literals in `tests/xcheck_*.rs` are now the specification.
 
@@ -61,7 +72,7 @@ darknet-only gate is now an `OnionHost` / `DarknetHost` newtype the fetcher will
 require, so a clearnet leak becomes a *compile* error, and the infohash a
 verified 20/32-byte newtype.
 The hostile-input parsers (bencode, KRPC, info-dict, magnet) have `cargo fuzz`
-harnesses under `fuzz/`.
+harnesses in the `torrentds` repository's `fuzz/`.
 
 ## Migration approach (strangler)
 

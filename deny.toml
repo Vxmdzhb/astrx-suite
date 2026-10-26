@@ -141,3 +141,12 @@ deny = [
 unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+# The suite's own crates, each in its repository.
+allow-git = [
+  "https://github.com/Vxmdzhb/crawlcore",
+  "https://github.com/Vxmdzhb/gitweb",
+  "https://github.com/Vxmdzhb/onioncrawler",
+  "https://github.com/Vxmdzhb/suitedash",
+  "https://github.com/Vxmdzhb/torrentds",
+  "https://github.com/Vxmdzhb/websearch",
+]

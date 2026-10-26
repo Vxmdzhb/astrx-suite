@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.89"
 license = "MIT"
-repository = "https://github.com/hydrastro/astrx"
+repository = "https://github.com/Vxmdzhb/astrx-suite"
 # Not published to crates.io, and the declaration is load-bearing rather than
-# decorative: every engine depends on crawlcore as `{ path = "../crawlcore" }`,
+# decorative: the suite's crates depend on each other through their git repositories,
 # and cargo-deny counts a versionless path dependency as a wildcard unless the
 # crate says it is unpublishable — because crates.io would reject a path
 # dependency anyway. Saying so here is also the only thing that stops a stray
@@ -27,12 +27,12 @@ description = "The single astrx entrypoint: dispatches to the five suite engines
 # `[workspace.dependencies]` so the manifest parses on pre-1.64 Cargo — see the
 # root Cargo.toml note.
 [dependencies]
-crawlcore = { path = "../crawlcore" }
-gitweb = { path = "../gitweb" }
-onioncrawler = { path = "../onioncrawler" }
-suitedash = { path = "../suitedash" }
-torrentds = { path = "../torrentds" }
-websearch = { path = "../websearch" }
+crawlcore = { git = "https://github.com/Vxmdzhb/crawlcore", branch = "main", version = "0.1" }
+gitweb = { git = "https://github.com/Vxmdzhb/gitweb", branch = "main", version = "0.1" }
+onioncrawler = { git = "https://github.com/Vxmdzhb/onioncrawler", branch = "main", version = "0.1" }
+suitedash = { git = "https://github.com/Vxmdzhb/suitedash", branch = "main", version = "0.1" }
+torrentds = { git = "https://github.com/Vxmdzhb/torrentds", branch = "main", version = "0.1" }
+websearch = { git = "https://github.com/Vxmdzhb/websearch", branch = "main", version = "0.1" }
 
 # `net` fans out to every engine's `net` feature, because that is the tier in
 # which each engine's `cli` module exists at all. There is deliberately no

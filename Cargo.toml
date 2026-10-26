@@ -1,40 +1,26 @@
-# astrx-suite — Rust engine workspace. One language for the whole suite.
-# Each engine is a crate; crawlcore is the shared library. Zero third-party
-# dependencies by default (stdlib only), matching the suite's austere ethos:
-# `crawlcore` is stdlib-only in its default build (its `net` feature adds tokio,
-# for the shared async HTTP reader), and `torrentds` with its default (empty) feature
-# set is too — the live node's two vetted deps (tokio, getrandom) are pulled in
-# only by the opt-in `net`/`rand` features. `cargo tree --no-default-features`
-# over torrentds is asserted empty in CI, so the claim stays true, not aspirational.
-# The Python engines being retired live under legacy-python/ during migration.
+# astrx-suite — assembles the suite's engines into the single `astrx` binary
+# and deploys it. Each engine is a crate in a repository of its own, and so is
+# crawlcore, the library they share:
 #
-# Manifests are deliberately written WITHOUT Cargo workspace-inheritance
-# (`field.workspace = true`, `[workspace.dependencies]`, `[workspace.lints]`) or
-# the `[lints]` table, so the whole workspace parses on Cargo as old as 1.56 and
-# a toolchain below the declared `rust-version` fails with a clear MSRV message
-# rather than a cryptic "feature `workspace-inheritance` is required" parse error.
-# Each crate therefore repeats its `edition`/`rust-version`/`license` and declares
-# its own `tokio`/`getrandom` versions; clippy's lint bar is enforced in CI via
-# `cargo clippy ... -- -D warnings`, not a manifest `[lints]` table.
+#   crawlcore     https://github.com/Vxmdzhb/crawlcore
+#   gitweb        https://github.com/Vxmdzhb/gitweb
+#   onioncrawler  https://github.com/Vxmdzhb/onioncrawler
+#   suitedash     https://github.com/Vxmdzhb/suitedash
+#   torrentds     https://github.com/Vxmdzhb/torrentds
+#   websearch     https://github.com/Vxmdzhb/websearch
+#
+# crates/astrx gets them as git dependencies; Cargo.lock pins the exact
+# commit of each. To work on an engine and the suite together, point Cargo
+# at a local checkout with a [patch] section, e.g. in .cargo/config.toml:
+#   [patch.'https://github.com/Vxmdzhb/gitweb']
+#   gitweb = { path = "../gitweb" }
+#
+# Manifests are written WITHOUT Cargo workspace-inheritance, so the workspace
+# parses on old Cargo and a toolchain below the declared `rust-version` fails
+# with a clear MSRV message.
 [workspace]
 resolver = "2"
-members = [
-    "crates/crawlcore",
-    "crates/torrentds",
-    "crates/onioncrawler",
-    "crates/websearch",
-    "crates/gitweb",
-    "crates/suitedash",
-    # The single `astrx` entrypoint. Depends on the five engine crates and calls
-    # each one's `cli::run`, so it adds no third-party dependency of its own; it
-    # is listed last because it is the only member that depends on the others.
-    "crates/astrx",
-]
-# `fuzz/` is a cargo-fuzz project with its own manifest; it is not a workspace
-# member and is built only via `cargo +nightly fuzz`.
-# tools/split is a one-off maintenance tool with its own manifest (see its
-# main.rs); run it with `cargo run --manifest-path tools/split/Cargo.toml`.
-exclude = ["fuzz", "tools/split"]
+members = ["crates/astrx"]
 
 [profile.release]
 opt-level = 3
