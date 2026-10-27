@@ -108,3 +108,8 @@ cargo tree -p torrentds --no-default-features                # → just `torrent
 Everything above is green today. The feature matrix (`--no-default-features`,
 `--features rand`, `--features net`, `--all-features`) all build clean, and the
 zero-dependency default is asserted in CI. See `ROADMAP.md` for the full timeline.
+
+## License
+
+Released under the [Do Whatever License](LICENSE), with a code of conduct
+in the same spirit: [CODE_OF_CONDUCT](CODE_OF_CONDUCT).

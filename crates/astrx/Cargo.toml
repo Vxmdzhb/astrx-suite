@@ -3,7 +3,7 @@ name = "astrx"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.89"
-license = "MIT"
+license = "LicenseRef-DoWhatever"
 repository = "https://github.com/Vxmdzhb/astrx-suite"
 # Not published to crates.io: the suite's crates depend on each other
 # through their git repositories, and this also stops a stray `cargo publish`.
